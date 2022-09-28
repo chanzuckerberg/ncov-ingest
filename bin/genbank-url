@@ -21,24 +21,33 @@ Virus URL.
 from urllib.parse import urlencode
 
 endpoint = "https://www.ncbi.nlm.nih.gov/genomes/VirusVariation/vvsearch2/"
+
+# Sidney's search criteria: https://www.ncbi.nlm.nih.gov/labs/virus/vssi/#/virus?SeqType_s=Nucleotide&VirusLineage_ss=Monkeypox%20virus%20(monkeypox),%20taxid:10244&SourceDB_s=GenBank&Completeness_s=complete&HostLineage_ss=Homo%20sapiens%20(human),%20taxid:9606&CollectionDate_dr=2022-01-01T00:00:00.00Z%20TO%202022-09-22T23:59:59.00Z&EnvSample_s=exclude&LabHost_s=exclude&VacStrain_s=exclude&Proviral_s=exclude&QualNum_i=39000
 params = {
     # Search criteria
-    'fq': [
-        '{!tag=SLen_i}SLen_i:([180000 TO 220000])', # Sequence length
-        '{!tag=SeqType_s}SeqType_s:("Nucleotide")', # Nucleotide sequences (as opposed to protein)
-        'VirusLineageId_ss:(10244)',              # NCBI Taxon id for Monkeypox
-#        '{!tag=Region_s}Region_s:("Africa")',       # Useful for debugging
-#        '{!tag=SLen_i}SLen_i:(["15000 TO 50000"])', # doesn't work, but might be useful
+    "fq": [
+        #        '{!tag=Region_s}Region_s:("Africa")',       # Useful for debugging
+        #        '{!tag=SLen_i}SLen_i:(["15000 TO 50000"])', # doesn't work, but might be useful
+        '{!tag=SeqType_s}SeqType_s:("Nucleotide")',
+        "VirusLineageId_ss:(10244)",  # Monkeypox
+        '{!tag=SourceDB_s}SourceDB_s:("GenBank")',
+        '{!tag=Completeness_s}Completeness_s:("complete")',
+        "HostLineageId_ss:(9606)",
+        "{!tag=CollectionDate_dr}CollectionDate_dr:[2022-01-01T00:00:00.00Z TO 2033-01-01T23:59:59.00Z]",  # Only the current outbreak
+        "{!tag=EnvSample_s} NOT EnvSample_s:*",
+        "{!tag=LabHost_s} NOT LabHost_s:*",
+        "{!tag=VacStrain_s} NOT VacStrain_s:*",
+        "{!tag=Proviral_s} NOT Proviral_s:*",
+        "{!tag=QualNum_i}QualNum_i:([0 TO 39000])",
     ],
-
     # Unclear, but seems necessary.
-    'q': '*:*',
-
+    "q": "*:*",
     # Response format
-    'cmd': 'download',
-    'dlfmt': 'csv',
-    'fl': ','.join(
-        ':'.join(names) for names in [
+    "cmd": "download",
+    "dlfmt": "csv",
+    "fl": ",".join(
+        ":".join(names)
+        for names in [
             # Pairs of (output column name, source data field).  These are pulled
             # from watching requests from the UI.
             #
@@ -46,35 +55,33 @@ params = {
             # somewhere?  Is there more info we could be pulling that'd be
             # useful?
             #   -trs, 13 May 2020
-            ('genbank_accession',       'id'),
-            ('genbank_accession_rev',   'AccVer_s'),
-            ('database',                'SourceDB_s'),
-            ('sra_accession',           'SRALink_ss'),
-            ('strain',                  'Isolate_s'),
-            ('region',                  'Region_s'),
-            ('location',                'CountryFull_s'),
-            ('collected',               'CollectionDate_s'),
-            ('submitted',               'CreateDate_dt'),
-            ('pango_lineage',           'Lineage_s'),
-            ('length',                  'SLen_i'),
-            ('host',                    'Host_s'),
-            ('isolation_source',        'Isolation_csv'),
-            ('biosample_accession',     'BioSample_s'),
-            ('title',                   'Definition_s'),
-            ('authors',                 'Authors_csv'),
-            ('publications',            'PubMed_csv'),
-            ('sequence',                'Nucleotide_seq'),
+            ("genbank_accession", "id"),
+            ("genbank_accession_rev", "AccVer_s"),
+            ("database", "SourceDB_s"),
+            ("sra_accession", "SRALink_ss"),
+            ("strain", "Isolate_s"),
+            ("region", "Region_s"),
+            ("location", "CountryFull_s"),
+            ("collected", "CollectionDate_s"),
+            ("submitted", "CreateDate_dt"),
+            ("pango_lineage", "Lineage_s"),
+            ("length", "SLen_i"),
+            ("host", "Host_s"),
+            ("isolation_source", "Isolation_csv"),
+            ("biosample_accession", "BioSample_s"),
+            ("title", "Definition_s"),
+            ("authors", "Authors_csv"),
+            ("publications", "PubMed_csv"),
+            ("sequence", "Nucleotide_seq"),
         ]
     ),
-
     # Stable sort with newest last so diffs work nicely.  Columns are source
     # data fields, not our output columns.
-    'sort': 'SourceDB_s desc, CollectionDate_s asc, id asc',
-
+    "sort": "SourceDB_s desc, CollectionDate_s asc, id asc",
     # This isn't Entrez, but include the same email parameter it requires just
     # to be nice.
-    'email': 'hello@czgenepi.org',
+    "email": "hello@czgenepi.org",
 }
-query = urlencode(params, doseq = True, encoding = "utf-8")
+query = urlencode(params, doseq=True, encoding="utf-8")
 
 print(f"{endpoint}?{query}")
