@@ -5,7 +5,7 @@ from GenBank via NCBI Virus.
 
 The URL this program builds is based on observing the network activity that
 
-    https://www.ncbi.nlm.nih.gov/labs/virus/vssi/#/virus?SeqType_s=Nucleotide&VirusLineage_ss=Severe%20acute%20respiratory%20syndrome%20coronavirus%202,%20taxid:2697049
+    https://www.ncbi.nlm.nih.gov/labs/virus/vssi/#/virus?SeqType_s=Nucleotide&VirusLineage_ss=Monkeypox virus (monkeypox), taxid:10244
 
 performs after clicking through the download interface.  Some tweaks were made
 by comparing different download requests and guessing, which allows us to
@@ -24,8 +24,9 @@ endpoint = "https://www.ncbi.nlm.nih.gov/genomes/VirusVariation/vvsearch2/"
 params = {
     # Search criteria
     'fq': [
+        '{!tag=SLen_i}SLen_i:([180000 TO 220000])', # Sequence length
         '{!tag=SeqType_s}SeqType_s:("Nucleotide")', # Nucleotide sequences (as opposed to protein)
-        'VirusLineageId_ss:(2697049)',              # NCBI Taxon id for SARS-CoV-2,
+        'VirusLineageId_ss:(10244)',              # NCBI Taxon id for Monkeypox
 #        '{!tag=Region_s}Region_s:("Africa")',       # Useful for debugging
 #        '{!tag=SLen_i}SLen_i:(["15000 TO 50000"])', # doesn't work, but might be useful
     ],
@@ -72,7 +73,7 @@ params = {
 
     # This isn't Entrez, but include the same email parameter it requires just
     # to be nice.
-    'email': 'hello@nextstrain.org',
+    'email': 'hello@czgenepi.org',
 }
 query = urlencode(params, doseq = True, encoding = "utf-8")
 

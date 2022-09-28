@@ -2,26 +2,29 @@
 """
 Parse the GenBank JSON load into a metadata tsv and a FASTA file.
 """
-import os
 import argparse
 import csv
+import os
 import sys
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
+
 import pandas as pd
 from xopen import xopen
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
-from utils.transform import (
-    METADATA_COLUMNS,
-)
+from utils.transform import METADATA_COLUMNS
 from utils.transformpipeline import LINE_NUMBER_KEY
 from utils.transformpipeline.datasource import LineToJsonDataSource
-from utils.transformpipeline.filters import SequenceLengthFilter, LineNumberFilter, GenbankProblematicFilter
+from utils.transformpipeline.filters import (
+    GenbankProblematicFilter,
+    LineNumberFilter,
+    SequenceLengthFilter,
+)
 from utils.transformpipeline.transforms import (
     AbbreviateAuthors,
-    ApplyUserGeoLocationSubstitutionRules,
     AddHardcodedMetadataGenbank,
+    ApplyUserGeoLocationSubstitutionRules,
     DropSequenceData,
     FillDefaultLocationData,
     FixLabs,
@@ -31,96 +34,112 @@ from utils.transformpipeline.transforms import (
     ParseGeographicColumnsGenbank,
     ParsePatientAge,
     ParseSex,
+    patchUKData,
     RenameAndAddColumns,
     StandardizeData,
     StandardizeGenbankStrainNames,
     Tracker,
     UserProvidedAnnotations,
     UserProvidedGeoLocationSubstitutionRules,
-    patchUKData
 )
 
-assert 'sequence' not in METADATA_COLUMNS, "Sequences should not appear in metadata!"
+assert "sequence" not in METADATA_COLUMNS, "Sequences should not appear in metadata!"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     base = Path(__file__).resolve().parent.parent
 
     parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("genbank_data",
+        description=__doc__, formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument(
+        "genbank_data",
         default="s3://nextstrain-data/files/ncov/open/genbank.ndjson.gz",
         nargs="?",
-        help="Newline-delimited GenBank JSON data")
-    parser.add_argument("--annotations",
-        default=base / "source-data/genbank_annotations.tsv",
+        help="Newline-delimited GenBank JSON data",
+    )
+    parser.add_argument(
+        "--annotations",
         help="Optional manually curated annotations TSV.\n"
-            "The TSV file should have no header and exactly three columns which contain:\n\t"
-            "1. the GenBank accession number\n\t"
-            "2. the column name to replace from the generated `metadata.tsv` file\n\t"
-            "3. the replacement data\n"
+        "The TSV file should have no header and exactly three columns which contain:\n\t"
+        "1. the GenBank accession number\n\t"
+        "2. the column name to replace from the generated `metadata.tsv` file\n\t"
+        "3. the replacement data\n"
         "Lines or parts of lines starting with '#' are treated as comments.\n"
         "e.g.\n\t"
         "MT039888	location    Boston\n\t"
         "# First Californian sample\n\t"
         "MN994467	country_exposure	China\n\t"
-        "MN908947	collection_date 2019-12-26 # Manually corrected date")
-    parser.add_argument("--accessions",
-        default=base / "source-data/accessions.tsv.gz",
-        help="Optional manually curated TSV cross-referencing accessions between databases (e.g. GISAID and GenBank/INSDC).")
-    parser.add_argument("--biosample",
-        default=base / "data/genbank/biosample.tsv",
+        "MN908947	collection_date 2019-12-26 # Manually corrected date",
+    )
+    parser.add_argument(
+        "--accessions",
+        help="Optional manually curated TSV cross-referencing accessions between databases (e.g. GISAID and GenBank/INSDC).",
+    )
+    parser.add_argument(
+        "--biosample",
         help="Optional BioSample metadata TSV.\n"
-            "The TSV file should be the output of `transform-biosample.py`")
-    parser.add_argument("--cog-uk-accessions",
-        default="https://cog-uk.s3.climb.ac.uk/accessions/latest.tsv",
-        help="The COG-UK sample accessions linkage TSV to help link COG-UK metadata with BioSample metadata.")
-    parser.add_argument("--cog-uk-metadata",
-        default="https://cog-uk.s3.climb.ac.uk/phylogenetics/latest/cog_metadata.csv.gz",
-        help="The COG-UK metadata CSV.")
-    parser.add_argument("--output-metadata",
+        "The TSV file should be the output of `transform-biosample.py`",
+    )
+    parser.add_argument(
+        "--cog-uk-accessions",
+        help="The COG-UK sample accessions linkage TSV to help link COG-UK metadata with BioSample metadata.",
+    )
+    parser.add_argument("--cog-uk-metadata", help="The COG-UK metadata CSV.")
+    parser.add_argument(
+        "--output-metadata",
         default=base / "data/genbank/metadata.tsv",
-        help="Output location of generated metadata tsv. Defaults to `data/genbank/metadata.tsv`")
-    parser.add_argument("--output-fasta",
+        help="Output location of generated metadata tsv. Defaults to `data/genbank/metadata.tsv`",
+    )
+    parser.add_argument(
+        "--output-fasta",
         default=base / "data/genbank/sequences.fasta",
-        help="Output location of generated FASTA file. Defaults to `data/genbank/sequences.fasta`")
-    parser.add_argument("--problem-data",
+        help="Output location of generated FASTA file. Defaults to `data/genbank/sequences.fasta`",
+    )
+    parser.add_argument(
+        "--problem-data",
         default=base / "data/genbank/problem_data.tsv",
-        help="Output location of generated tsv of problem records missing geography region or country")
-    parser.add_argument("--duplicate-biosample",
+        help="Output location of generated tsv of problem records missing geography region or country",
+    )
+    parser.add_argument(
+        "--duplicate-biosample",
         default=base / "data/genbank/duplicate_biosample.txt",
         help="Output location of generated TXT file in the Nextstrain exclusions.txt convention.\n"
-             "Used for flagging sequences with duplicate BioSample accessions")
-    parser.add_argument("--sorted-fasta", action="store_true",
-        help="Sort the fasta file in the same order as the metadata file.  WARNING: Enabling this option can consume a lot of memory.")
-    parser.add_argument("--geo-location-rules",
-        default = str( base / "source-data/gisaid_geoLocationRules.tsv" ) ,
+        "Used for flagging sequences with duplicate BioSample accessions",
+    )
+    parser.add_argument(
+        "--sorted-fasta",
+        action="store_true",
+        help="Sort the fasta file in the same order as the metadata file.  WARNING: Enabling this option can consume a lot of memory.",
+    )
+    parser.add_argument(
+        "--geo-location-rules",
+        default=str(base / "source-data/gisaid_geoLocationRules.tsv"),
         help="Optional manually curated rules to correct geographical location.\n"
-            "The TSV file should have no header and exactly 2 columns in the following format:\n\t"
-            "region/country/division/location<tab>region/country/division/location"
+        "The TSV file should have no header and exactly 2 columns in the following format:\n\t"
+        "region/country/division/location<tab>region/country/division/location"
         "Lines or parts of lines starting with '#' are treated as comments.\n"
         "e.g.\n\t"
-        "Europe/Spain/Catalunya/Mataró\tEurope/Spain/Catalunya/Mataro\n\t")
+        "Europe/Spain/Catalunya/Mataró\tEurope/Spain/Catalunya/Mataro\n\t",
+    )
     parser.add_argument(
         "--output-unix-newline",
         dest="newline",
         action="store_const",
         const="\n",
         default=os.linesep,
-        help="When specified, always use unix newlines in output files."
+        help="When specified, always use unix newlines in output files.",
     )
     args = parser.parse_args()
 
-
-    #parsing curated annotations
+    # parsing curated annotations
     annotations = UserProvidedAnnotations()
     if args.annotations:
         # Use the curated annotations tsv to update any column values
         with open(args.annotations, "r") as gisaid_fh:
-            csvreader = csv.reader(gisaid_fh, delimiter='\t')
+            csvreader = csv.reader(gisaid_fh, delimiter="\t")
             for row in csvreader:
-                if row[0].lstrip()[0] == '#':
+                if row[0].lstrip()[0] == "#":
                     continue
                 elif len(row) != 3:
                     print("WARNING: couldn't decode annotation line " + "\t".join(row))
@@ -130,14 +149,13 @@ if __name__ == '__main__':
                     strainId,
                     key,
                     # remove the comment and the extra ws from the value
-                    value.split('#')[0].rstrip(),
+                    value.split("#")[0].rstrip(),
                 )
-
 
     accessions = UserProvidedAnnotations()
     if args.accessions:
         with xopen(args.accessions, "r") as accessions_fh:
-            for row in csv.DictReader(accessions_fh, delimiter='\t'):
+            for row in csv.DictReader(accessions_fh, delimiter="\t"):
                 accessions.add_user_annotation(
                     row["genbank_accession"],
                     "gisaid_epi_isl",
@@ -145,25 +163,32 @@ if __name__ == '__main__':
                 )
 
     geoRules = UserProvidedGeoLocationSubstitutionRules()
-    if args.geo_location_rules :
+    if args.geo_location_rules:
         # use curated rules to subtitute known spurious locations with correct ones
-        with open(args.geo_location_rules,'r') as geo_location_rules_fh :
+        with open(args.geo_location_rules, "r") as geo_location_rules_fh:
             for line in geo_location_rules_fh:
-                geoRules.readFromLine( line )
+                geoRules.readFromLine(line)
 
     biosample = {}
     if args.biosample:
-        biosample = pd.read_csv(args.biosample, sep='\t', dtype='string', index_col='biosample_accession')\
-                      .fillna('?') \
-                      .to_dict(orient='index')
+        biosample = (
+            pd.read_csv(
+                args.biosample,
+                sep="\t",
+                dtype="string",
+                index_col="biosample_accession",
+            )
+            .fillna("?")
+            .to_dict(orient="index")
+        )
 
-
-    with open(args.genbank_data, "r") as genbank_fh :
+    with open(args.genbank_data, "r") as genbank_fh:
 
         pipeline = (
             LineToJsonDataSource(genbank_fh)
-            | RenameAndAddColumns(column_map = { 'collected': 'date',
-                                                 'submitted': 'date_submitted'})
+            | RenameAndAddColumns(
+                column_map={"collected": "date", "submitted": "date_submitted"}
+            )
             | StandardizeData()
             | SequenceLengthFilter(15000)
         )
@@ -171,36 +196,39 @@ if __name__ == '__main__':
         if not args.sorted_fasta:
             pipeline = pipeline | DropSequenceData()
 
-        pipeline = ( pipeline | AddHardcodedMetadataGenbank()
-                              | MergeBiosampleMetadata(biosample)
-                              | FixLabs()
-                              | ParsePatientAge()
-                              | ParseSex()
-                              | MaskBadCollectionDate()
-                              | StandardizeGenbankStrainNames()
-                              | ParseGeographicColumnsGenbank( base / 'source-data/us-state-codes.tsv' )
-                              | AbbreviateAuthors()
-                              | ApplyUserGeoLocationSubstitutionRules(geoRules)
-                              | MergeUserAnnotatedMetadata(annotations, idKey = 'genbank_accession' )
-                              | MergeUserAnnotatedMetadata(accessions, idKey = 'genbank_accession_rev' )
-                              | FillDefaultLocationData()
-                              | patchUKData(args.cog_uk_accessions, args.cog_uk_metadata)
-                              | GenbankProblematicFilter( args.problem_data,
-                                                          ['genbank_accession', 'strain', 'region', 'country', 'url'],
-                                                          restval = '?' ,
-                                                          extrasaction ='ignore' ,
-                                                          delimiter  = '\t',
-                                                          dict_writer_kwargs  = {'lineterminator': args.newline} )
+        pipeline = (
+            pipeline
+            | AddHardcodedMetadataGenbank()
+            | MergeBiosampleMetadata(biosample)
+            | FixLabs()
+            | ParsePatientAge()
+            | ParseSex()
+            | MaskBadCollectionDate()
+            | StandardizeGenbankStrainNames()
+            | ParseGeographicColumnsGenbank(base / "source-data/us-state-codes.tsv")
+            | AbbreviateAuthors()
+            | ApplyUserGeoLocationSubstitutionRules(geoRules)
+            | MergeUserAnnotatedMetadata(annotations, idKey="genbank_accession")
+            | MergeUserAnnotatedMetadata(accessions, idKey="genbank_accession_rev")
+            | FillDefaultLocationData()
+            | GenbankProblematicFilter(
+                args.problem_data,
+                ["genbank_accession", "strain", "region", "country", "url"],
+                restval="?",
+                extrasaction="ignore",
+                delimiter="\t",
+                dict_writer_kwargs={"lineterminator": args.newline},
+            )
         )
 
         sorted_metadata = sorted(
             pipeline,
             key=lambda obj: (
-                obj['strain'],
-                -obj['length'],
-                obj['genbank_accession'],
-                obj[LINE_NUMBER_KEY]
-            )
+                obj["strain"],
+                -obj["length"],
+                obj["genbank_accession"],
+                obj[LINE_NUMBER_KEY],
+            ),
         )
 
     # this should be moved further down
@@ -214,18 +242,17 @@ if __name__ == '__main__':
 
     for entry in sorted_metadata:
 
-        if entry['strain'] in seen_strains:
+        if entry["strain"] in seen_strains:
             continue
 
-        seen_strains.add(entry['strain'])
+        seen_strains.add(entry["strain"])
         line_numbers.add(entry[LINE_NUMBER_KEY])
-        updated_strain_names_by_line_no[entry[LINE_NUMBER_KEY]] = entry['strain']
+        updated_strain_names_by_line_no[entry[LINE_NUMBER_KEY]] = entry["strain"]
 
-        if entry['biosample_accession']:
-            biosamples[entry['biosample_accession']].append(entry['strain'])
+        if entry["biosample_accession"]:
+            biosamples[entry["biosample_accession"]].append(entry["strain"])
 
-
-    with open( args.duplicate_biosample, 'wt' ) as biosample_OUT:
+    with open(args.duplicate_biosample, "wt") as biosample_OUT:
         for biosample, strains in biosamples.items():
             # Only flag BioSample accessions with more than one linked strain
             if len(strains) > 1:
@@ -235,45 +262,46 @@ if __name__ == '__main__':
                     reason = f"# Strain has same BioSample accession ({biosample}) as {strain_to_keep}"
                     biosample_OUT.write(f"{strain}\t{reason}{args.newline}")
 
-
-    with open( args.output_metadata , 'wt' ) as metadata_OUT:
-        dict_writer_kwargs = {'lineterminator': args.newline}
+    with open(args.output_metadata, "wt") as metadata_OUT:
+        dict_writer_kwargs = {"lineterminator": args.newline}
 
         metadata_csv = csv.DictWriter(
             metadata_OUT,
             METADATA_COLUMNS,
             restval="",
-            extrasaction='ignore',
-            delimiter='\t',
-            **dict_writer_kwargs
+            extrasaction="ignore",
+            delimiter="\t",
+            **dict_writer_kwargs,
         )
         metadata_csv.writeheader()
 
-        for entry in sorted_metadata :
+        for entry in sorted_metadata:
             if entry[LINE_NUMBER_KEY] in line_numbers:
                 metadata_csv.writerow(entry)
 
     if args.sorted_fasta:
-        with open( args.output_fasta , 'wt' ) as fasta_OUT:
-            for entry in sorted_metadata :
+        with open(args.output_fasta, "wt") as fasta_OUT:
+            for entry in sorted_metadata:
                 if entry[LINE_NUMBER_KEY] in line_numbers:
-                    strain_name = updated_strain_names_by_line_no[entry[LINE_NUMBER_KEY]]
-                    print( '>' , strain_name , sep='' , file= fasta_OUT)
-                    print( entry['sequence'] , file= fasta_OUT)
-
-
+                    strain_name = updated_strain_names_by_line_no[
+                        entry[LINE_NUMBER_KEY]
+                    ]
+                    print(">", strain_name, sep="", file=fasta_OUT)
+                    print(entry["sequence"], file=fasta_OUT)
 
     if not args.sorted_fasta:
 
-        with open(args.genbank_data, "r") as genbank_IN , open(args.output_fasta, "wt", newline=args.newline) as fasta_OUT:
-                for entry in (
-                        LineToJsonDataSource(genbank_IN)
-                        | RenameAndAddColumns(column_map = { 'collected': 'date',
-                                                 'submitted': 'date_submitted'})
-                        | StandardizeData()
-                        | LineNumberFilter(line_numbers)
-                ):
-                    strain_name = updated_strain_names_by_line_no[entry[LINE_NUMBER_KEY]]
-                    print( '>' , strain_name , sep='' , file= fasta_OUT)
-                    print( entry['sequence'] , file= fasta_OUT)
-
+        with open(args.genbank_data, "r") as genbank_IN, open(
+            args.output_fasta, "wt", newline=args.newline
+        ) as fasta_OUT:
+            for entry in (
+                LineToJsonDataSource(genbank_IN)
+                | RenameAndAddColumns(
+                    column_map={"collected": "date", "submitted": "date_submitted"}
+                )
+                | StandardizeData()
+                | LineNumberFilter(line_numbers)
+            ):
+                strain_name = updated_strain_names_by_line_no[entry[LINE_NUMBER_KEY]]
+                print(">", strain_name, sep="", file=fasta_OUT)
+                print(entry["sequence"], file=fasta_OUT)
