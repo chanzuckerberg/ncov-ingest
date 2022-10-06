@@ -26,13 +26,13 @@ endpoint = "https://www.ncbi.nlm.nih.gov/genomes/VirusVariation/vvsearch2/"
 params = {
     # Search criteria
     "fq": [
-        #        '{!tag=Region_s}Region_s:("Africa")',       # Useful for debugging
-        #        '{!tag=SLen_i}SLen_i:(["15000 TO 50000"])', # doesn't work, but might be useful
+        # '{!tag=Region_s}Region_s:("Africa")',       # Useful for debugging
+        # '{!tag=SLen_i}SLen_i:(["177000 TO 200000"])', # doesn't work but we eventually want to be downloading genomes with >= 90% completeness relative to reference
         '{!tag=SeqType_s}SeqType_s:("Nucleotide")',
         "VirusLineageId_ss:(10244)",  # Monkeypox
         '{!tag=SourceDB_s}SourceDB_s:("GenBank")',
-        '{!tag=Completeness_s}Completeness_s:("complete")',
-        "HostLineageId_ss:(9606)",
+        # '{!tag=Completeness_s}Completeness_s:("complete")', # for mpx, we can double our data by including partial genomes with >=90% completeness
+        "HostLineageId_ss:(9605)", # Human
         "{!tag=CollectionDate_dr}CollectionDate_dr:[2022-01-01T00:00:00.00Z TO 2033-01-01T23:59:59.00Z]",  # Only the current outbreak
         "{!tag=EnvSample_s} NOT EnvSample_s:*",
         "{!tag=LabHost_s} NOT LabHost_s:*",
@@ -56,17 +56,17 @@ params = {
             # useful?
             #   -trs, 13 May 2020
             ("genbank_accession", "id"),
-            ("genbank_accession_rev", "AccVer_s"),
-            ("database", "SourceDB_s"),
+            # ("genbank_accession_rev", "AccVer_s"),  # not sure what this is, doesn't seem necessary for our purposes
+            # ("database", "SourceDB_s"), # always genbank per query
             ("sra_accession", "SRALink_ss"),
             ("strain", "Isolate_s"),
             ("region", "Region_s"),
             ("location", "CountryFull_s"),
             ("collected", "CollectionDate_s"),
             ("submitted", "CreateDate_dt"),
-            ("pango_lineage", "Lineage_s"),
-            ("length", "SLen_i"),
-            ("host", "Host_s"),
+            # ("pango_lineage", "Lineage_s"), # not relevant for mpx
+            # ("length", "SLen_i"), 
+            # ("host", "Host_s"), # always human per query
             ("isolation_source", "Isolation_csv"),
             ("biosample_accession", "BioSample_s"),
             ("title", "Definition_s"),
