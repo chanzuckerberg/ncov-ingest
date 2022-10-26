@@ -56,7 +56,7 @@ params = {
             # useful?
             #   -trs, 13 May 2020
             ("genbank_accession", "id"),
-            # ("genbank_accession_rev", "AccVer_s"),  # not sure what this is, doesn't seem necessary for our purposes
+            ("genbank_accession_rev", "AccVer_s"),  # not sure what this is, doesn't seem necessary for our purposes
             # ("database", "SourceDB_s"), # always genbank per query
             ("sra_accession", "SRALink_ss"),
             ("strain", "Isolate_s"),
