@@ -419,7 +419,7 @@ class AddHardcodedMetadata(Transformer):
     """
     def transform_value(self, entry: dict) -> dict:
         epi_id = entry["gisaid_epi_isl"].upper()
-        entry['virus'] = 'ncov'
+        entry['virus'] = 'mpx'
         entry['genbank_accession'] = '?'
         if len(epi_id)>4: # gisaid epi ids don't have a fixed length, but check for at least length 4 to avoid a crash here
             entry['url'] = f'https://www.epicov.org/acknowledgement/{epi_id[-4:-2]}/{epi_id[-2:]}/{epi_id}.json'
@@ -638,7 +638,7 @@ class AddHardcodedMetadataGenbank(Transformer):
     """
     def transform_value(self, entry: dict) -> dict:
 
-        entry['virus']             = 'ncov'
+        entry['virus']             = 'mpx'
         entry['gisaid_epi_isl']    = '?'
         entry['segment']           = 'genome'
         entry['age']               = '?'
