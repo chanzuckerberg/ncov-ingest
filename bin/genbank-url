@@ -27,7 +27,7 @@ params = {
     # Search criteria
     "fq": [
         # '{!tag=Region_s}Region_s:("Africa")',       # Useful for debugging
-        # '{!tag=SLen_i}SLen_i:(["177000 TO 200000"])', # doesn't work but we eventually want to be downloading genomes with >= 90% completeness relative to reference
+        '{!tag=SLen_i}SLen_i:([177000 TO 200000])', # doesn't work but we eventually want to be downloading genomes with >= 90% completeness relative to reference
         '{!tag=SeqType_s}SeqType_s:("Nucleotide")',
         "VirusLineageId_ss:(10244)",  # Monkeypox
         '{!tag=SourceDB_s}SourceDB_s:("GenBank")',
